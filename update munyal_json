@@ -1,0 +1,42 @@
+import os
+import json
+import rethinkdb as r
+import hashlib
+def get_subir(parametro):
+	try:
+		r.connect( "localhost", 28015).repl()
+		#r.db("test").table_create("newcontedo").run()
+		r.table("newcontedo").insert(parametro).run()
+		print("insert  in rethinkdb")
+		pass
+	except Exception as e:
+		print("Error, EN conexión o Tabla existente")
+		
+def get_chck(cont):
+	BLOCKSIZE = 10000
+	hasher = hashlib.sha1()
+	chck=0
+	with open(cont, 'rb') as afile:
+		buf = afile.read(BLOCKSIZE)
+		while len(buf) > 0:
+			hasher.update(buf)
+			buf = afile.read(BLOCKSIZE)
+			chck=hasher.hexdigest()
+		return chck
+def get_json(parametro):
+	data=[]
+	contenido=os.listdir(parametro)
+	for cont in contenido:
+		name = cont
+		cont = os.path.join(parametro, cont)
+		if(os.path.isfile(cont)):
+			chck=get_chck(cont)
+			data.append({name:chck})
+		elif(os.path.isdir(cont)):
+			contenido_nuevo=get_json(cont)
+			data.append({name:contenido_nuevo})
+	return data
+directorio=os.getcwd()
+jsonend=get_json(directorio)
+print(jsonend)
+get_subir(jsonend)
