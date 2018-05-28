@@ -7,6 +7,7 @@ from dir_to_json import get_json
 from copy import deepcopy
 from time import sleep
 from requests import post
+from requests import get
 from shutil import rmtree
 from threading import Thread
 from tcping import Ping
@@ -32,16 +33,52 @@ ORIGINAL = "/home/kirbylife/Proyectos/munyal_test/"
 IP = "localhost"
 USERNAME = "munyal"
 PASSWORD = "123"
+RDB = ""
+FTP = ""
+HTTP = ""
 HOSTNAME = socket.gethostname() + str(randint(1, 100000000))
 SKIP_UPLOAD = []
 FLAG_DOWNLOAD = False
 pending_routes = []
+
+split_address = lambda x: (x.split(":")[0], int(x.split(":")[1]))
+
+def alert(title, message):
+    window = Tk()
+    window.title = title
+    Label(window, text=message).pack()
+    Button(window, text="Aceptar", command=window.destroy)
 
 def check_network(port):
     ping = Ping(IP, port, 20)
     ping.ping(1)
     print(SKIP_UPLOAD)
     return ping.result.rows[0].successed == 1
+
+def get_addresses(name, first=False):
+    global RDB
+    global FTP
+    global HTTP
+    
+    while True:
+        response = get("http://localhost:5000/directory", params={"name": name})
+        response_content = json.loads(response.text)
+        if response.status_code != 200:
+            if first:
+                alert("Error", "Revisa tu cone")
+                return False
+        elif response_content['status'] != 'ok':
+            if first:
+                alert(response['error'], response['message'])
+                return false
+        else:
+            RDB = response['rdb_address'] if response['rdb_address'] != RDB else RDB
+            FTP = response['ftp_address'] if response['ftp_address'] != FTP else FTP
+            HTTP = response['http_address'] if response['http_address'] != HTTP else HTTP
+            if first:
+                return True
+        sleep(60)
+            
 
 def watch_dir():
     global pending_routes
@@ -173,10 +210,12 @@ def download_ftp_tree(overwrite=False):
 def upload(*args):
     global SKIP_UPLOAD
     global pending_routes
+    global HTTP
+    global FTP
     print("Modulo de subida listo")
     while True:
         sleep(0.1)
-        if check_network('21') and pending_routes:
+        if check_network(FTP) and check_network(HTTP) and pending_routes:
             change = pending_routes.pop(0)
             while FLAG_DOWNLOAD:
                 print("Wait")
@@ -203,7 +242,7 @@ def upload(*args):
                             print("Unexpected action")
                     except:
                         print("Error uploading\n")
-                    r = post("http://"+IP+':5000/upload', data={
+                    r = post("http://"+HTTP+'/upload', data={
                             'host': HOSTNAME,
                             'action': change['action'],
                             'route': change['route']
@@ -219,9 +258,11 @@ def upload(*args):
 
 def download(*args):
     global SKIP_UPLOAD
+    global RDB
+    global FTP
     while True:
         sleep(1)
-        if check_network(28015) and check_network(21):
+        if check_network(RDB) and check_network(RDB):
             try:
                 download_ftp_tree(overwrite=False)
                 
@@ -263,7 +304,7 @@ def download(*args):
                 print("Conection refused with rethinkdb")
     return 0
 
-def run_client(window, password, username, host, folder):
+def run_client(window, password, username, server_name, folder):
     global PASSWORD
     global IP
     global USERNAME
@@ -271,7 +312,7 @@ def run_client(window, password, username, host, folder):
     
     PASSWORD = password.get()
     USERNAME = username.get()
-    IP = host.get()
+    NAME = server_name.get()
     ORIGINAL = folder.get()
     
     if not os.path.exists(ORIGINAL):
@@ -294,9 +335,9 @@ def main(args):
     root.geometry("200x300")
     root.title("MUNYAL")
     
-    host = StringVar()
-    host.set("localhost")
-    host_field = Entry(root, textvariable=host)
+    server_name = StringVar()
+    server_name.set("munyal")
+    server_name_field = Entry(root, textvariable=server_name)
     
     user = StringVar()
     user.set("munyal")
@@ -310,7 +351,7 @@ def main(args):
     folder.set(os.path.join(os.getenv("HOME"), "Munyal"))
     folder_field = Entry(root, textvariable=folder)
     
-    connect = Button(root, text="Conectar", command = lambda: run_client(root, passwd, user, host, folder))
+    connect = Button(root, text="Conectar", command = lambda: run_client(root, passwd, user, server_name, folder))
     
     Label(root, text="MUNYAL").pack()
     Label(root, text="").pack()
